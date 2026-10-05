@@ -7,6 +7,8 @@ const jwt = require("jsonwebtoken")
 
 const auth = require("./middleware/auth")
 
+const bcrypt = require("bcrypt")
+
 
 const app = express()
 
@@ -24,15 +26,62 @@ app.get("/",(req,res)=>{
 })
 
 
+app.post("/register",async(req,res)=>{
+
+    try {
+        
+        const {nome, email, senha} = req.body
+
+        if(!nome || !email || !senha){
+            return res.status(400).json({
+                mensagem:"Preencha todos os campos"
+            })
+        }
+
+        const [usuarioExistente] = await db.query(
+            "SELECT id FROM usuario WHERE email = ?",
+            [email]
+        )
+
+        if(usuarioExistente.length > 0){
+            return res.status(400).json({
+                mensagem:"E-mail ja cadastrado"
+            })
+        }
+
+        const senhaHash = await bcrypt.hash(senha,10)
+
+        await db.query(
+            "INSERT INTO usuario(nome, email,senha)VALUES(?,?,?)",
+            [nome,email,senhaHash]
+        )
+
+        res.status(201).json({
+            mensagem:"Usuario cadastrado com sucesso"
+        })
+
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({
+            mensagem:"Erro interno"
+        })
+    }
+})
+
+
 app.post("/login",async (req,res)=>{
 
     const {email,senha} = req.body
+
+        console.log("Dados recebidos:", email, senha)
 
     try {
         const [usuarios] = await db.query(
             "SELECT * FROM usuario WHERE email = ?",
             [email]
         )
+
+         console.log("Usuários encontrados:", usuarios)
 
         if(usuarios.length == 0){
             return res.status(401).json({
@@ -42,10 +91,16 @@ app.post("/login",async (req,res)=>{
 
         const usuario = usuarios[0]
 
+        const senhaValida = await bcrypt.compare(
+            senha,
+            usuario.senha
+        )
 
-        if(usuario.senha !== senha){
+        console.log("Senha válida:", senhaValida)
+
+        if(!senhaValida){
             return res.status(401).json({
-                mensagem:"Email ou senha invalidos"
+                mensagem:"Senha Invalida"
             })
         }
 
@@ -62,6 +117,7 @@ app.post("/login",async (req,res)=>{
         )
 
         res.json({
+            mensagem:"Login realizado",
             token
         })
 
